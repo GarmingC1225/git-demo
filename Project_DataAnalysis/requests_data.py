@@ -1,3 +1,5 @@
+import re
+
 import requests
 import time
 from bs4 import BeautifulSoup
@@ -11,42 +13,69 @@ headers = {
 
 }
 #URL
-url = "https://category.dangdang.com/?ref=www-0-C"
+url = "https://search.dangdang.com/?key=%BC%C6%CB%E3%BB%FA&act=input"
 
-#发送请求
+books_data = []
+
 try:
     response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status() #检查请求是否成功
-    response.encoding = "gb2312" #防止中文乱码
-# 解析HTML
-    soup = BeautifulSoup(response.text, "html.parser")
-    classify_ul = soup.find('ul',class_='classify_sort')    #按类查找
+    response.raise_for_status()  # 检查请求是否成功
+    response.encoding = "gb2312"  # 防止中文乱码
 
-    categories = []
+    soup = BeautifulSoup(response.text,"html.parser")
 
-#遍历所有分类链接
-    for li in classify_ul.find_all('li'):
-        a_tag = li.find('a')
-        if a_tag:
-            name = a_tag.get_text().strip() #分类名称
-            link = a_tag.get("href")    #分类链接
+    #<li
+    book_items= soup.find_all('li',class_ = re.compile(r"^line\d+$"))
 
-            categories.append({
-                'category_name':name,
-                'category_url':link,
-                'level':'一级分类'
-            })
+    for item in book_items:
+        #书名
+        item_name= item.find('p', attrs={"class":'name'})#获取数据一定要对应拥有此数据的标签,find()参数无name，用attrs字典来解决
+        name = "无书名"
+        if item_name:
+            a_name = item_name.find("a")#获取a标签
+            name = a_name['title'].strip()#a标签中获取其title属性值
+        else:
+            print("无书名")
 
-#保存为csv
-    df = pd.DataFrame(categories)
-    df.to_csv('dangdang_categories.csv', index = False, encoding='gb2312')
-    print('已保存分类数据')
+        #价格
+        item_price = item.find('span',class_ = 'search_now_price')
+        price = "无价格"
+        if item_price:
+            price = item_price.get_text().strip()
+        else:
+            print("无价格")
+        #评论数
+        item_comments = item.find('p',class_ = "search_star_line")
+        comment_count = 0
+        if item_comments:
+            comment_text = item_comments.get_text().strip() #字符串
+            match = re.search(r"\d+",comment_text)#匹配对象
+            if match:
+                comment_count = int(match.group())
+        print(f"评论数为{comment_count}")
 
-except requests.exceptions.RequestException as e:
-    print(f"请求失败：{e}")
+        books_data.append({
+            '书名': name,
+            '价格': price,
+            '评论数': comment_count   #包含非数字字符处理
+        })
+
+        print("爬取完成")
+        time.sleep(4)
+
+#转换为DataFrame
+    df = pd.DataFrame(books_data)
+    df.to_csv('computer_books_1.csv',index=False,encoding='utf-8-sig')
+    print("数据已保存")
+
+except Exception as e:
+    print(f"爬取失败{e}")
     exit()
 
-time.sleep(4)
+
+
+
+
 
 
 
